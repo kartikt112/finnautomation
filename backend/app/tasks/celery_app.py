@@ -30,4 +30,6 @@ celery_app.conf.beat_schedule = {
     },
 }
 
-celery_app.autodiscover_tasks(["app.tasks"])
+# Explicit imports so tasks are registered when worker starts
+import app.tasks.scheduler  # noqa: F401, E402
+import app.tasks.worker  # noqa: F401, E402
