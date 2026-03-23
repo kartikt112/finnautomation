@@ -1,6 +1,9 @@
 import random
 from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 from app.config import settings
+
+DUTCH_TZ = ZoneInfo("Europe/Amsterdam")
 
 
 def generate_random_times(target_date: date, count: int | None = None) -> list[datetime]:
@@ -19,7 +22,7 @@ def generate_random_times(target_date: date, count: int | None = None) -> list[d
         hour = start_hour + random_minutes // 60
         minute = random_minutes % 60
         second = random.randint(0, 59)
-        t = datetime(target_date.year, target_date.month, target_date.day, hour, minute, second)
+        t = datetime(target_date.year, target_date.month, target_date.day, hour, minute, second, tzinfo=DUTCH_TZ)
         times.add(t)
         attempts += 1
 

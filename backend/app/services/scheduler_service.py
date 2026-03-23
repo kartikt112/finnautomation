@@ -1,8 +1,11 @@
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+
+DUTCH_TZ = ZoneInfo("Europe/Amsterdam")
 from app.models import Campaign, Job, JobStatus, CampaignStatus
 from app.utils.randomizer import generate_random_times, pick_random_entry
 
@@ -15,7 +18,7 @@ def get_sync_session() -> Session:
 def generate_daily_jobs():
     """Called by Celery Beat daily. Generates randomized jobs for all active campaigns."""
     session = get_sync_session()
-    today = date.today()
+    today = datetime.now(DUTCH_TZ).date()
 
     try:
         campaigns = session.execute(
@@ -78,14 +81,13 @@ def generate_daily_jobs():
 
 def get_pending_jobs_for_now() -> list[str]:
     """Get job IDs that are pending and scheduled for now or in the past."""
-    from datetime import datetime
-
     session = get_sync_session()
     try:
+        now = datetime.now(DUTCH_TZ)
         jobs = session.execute(
             select(Job).where(
                 Job.status == JobStatus.pending,
-                Job.scheduled_time <= datetime.utcnow(),
+                Job.scheduled_time <= now,
             )
         ).scalars().all()
 
