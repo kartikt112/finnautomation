@@ -27,8 +27,8 @@ async def upload_excel(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Only .xlsx files are accepted")
+    if not file.filename.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Only .xlsx or .csv files are accepted")
 
     # Save file
     file_id = str(uuid.uuid4())
