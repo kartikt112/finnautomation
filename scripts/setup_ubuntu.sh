@@ -20,12 +20,9 @@ echo -e "\n[1/11] Updating system..."
 apt update && apt upgrade -y
 apt install -y curl wget git build-essential software-properties-common
 
-# --- 2. Install Python 3.11+ ---
+# --- 2. Install Python 3.12 (ships with Ubuntu 24.04) ---
 echo -e "\n[2/11] Installing Python..."
-add-apt-repository -y ppa:deadsnakes/ppa
-apt update
-apt install -y python3.11 python3.11-venv python3.11-dev python3-pip
-update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+apt install -y python3 python3-pip python3-venv python3-dev
 python3 --version
 
 # --- 3. Install Node.js 20 ---
