@@ -1,4 +1,6 @@
+import os
 import traceback
+import time
 from datetime import datetime
 
 from sqlalchemy import create_engine
@@ -7,7 +9,9 @@ from sqlalchemy.orm import Session
 from app.tasks.celery_app import celery_app
 from app.config import settings
 from app.models import Job, JobStatus, Log, Campaign
-from app.services.multilogin_service import MultiloginServiceSync
+
+# Test mode: skip Multilogin + Playwright, just simulate
+TEST_MODE = os.environ.get("TEST_MODE", "true").lower() == "true"
 
 
 def get_sync_session() -> Session:
@@ -30,7 +34,6 @@ def add_log(session: Session, job_id: str, status: str, message: str, error_trac
 def execute_job(self, job_id: str):
     """Execute a single automation job via Multilogin + Playwright."""
     session = get_sync_session()
-    multilogin = MultiloginServiceSync()
 
     try:
         job = session.get(Job, job_id)
@@ -52,52 +55,46 @@ def execute_job(self, job_id: str):
         username = entry_data.get("username", "")
         password = entry_data.get("password", "")
 
-        # Get a profile ID from the client's profile group
-        # For now, use the profile group as the profile ID
-        # In production, you'd pick from a pool of profiles
-        profile_id = campaign.client_id  # TODO: map to actual Multilogin profile ID
+        if TEST_MODE:
+            # --- TEST MODE: simulate automation without Multilogin ---
+            add_log(session, job_id, "running", f"[TEST MODE] Would connect to Multilogin")
+            add_log(session, job_id, "running", f"[TEST MODE] Would navigate to {campaign.target_url}")
+            add_log(session, job_id, "running", f"[TEST MODE] Would automate for user: {username}")
+            time.sleep(2)  # Simulate work
+            add_log(session, job_id, "running", f"[TEST MODE] Automation simulated successfully")
+        else:
+            # --- PRODUCTION MODE: use Multilogin + Playwright ---
+            from app.services.multilogin_service import MultiloginServiceSync
+            multilogin = MultiloginServiceSync()
 
-        # Start Multilogin profile
-        add_log(session, job_id, "running", f"Starting Multilogin profile: {profile_id}")
+            profile_id = campaign.client_id  # TODO: map to actual Multilogin profile ID
 
-        try:
-            start_response = multilogin.start_profile(str(profile_id))
-            ws_endpoint = multilogin.get_ws_endpoint(start_response)
-        except Exception as e:
-            raise Exception(f"Failed to start Multilogin profile: {e}")
+            add_log(session, job_id, "running", f"Starting Multilogin profile: {profile_id}")
 
-        try:
-            # Connect Playwright and perform automation
-            from playwright.sync_api import sync_playwright
+            try:
+                start_response = multilogin.start_profile(str(profile_id))
+                ws_endpoint = multilogin.get_ws_endpoint(start_response)
+            except Exception as e:
+                raise Exception(f"Failed to start Multilogin profile: {e}")
 
-            with sync_playwright() as p:
-                browser = p.chromium.connect_over_cdp(ws_endpoint)
-                context = browser.contexts[0] if browser.contexts else browser.new_context()
-                page = context.new_page()
+            try:
+                from playwright.sync_api import sync_playwright
 
-                # Navigate to target URL
-                add_log(session, job_id, "running", f"Navigating to {campaign.target_url}")
-                page.goto(campaign.target_url, wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(2000)
+                with sync_playwright() as p:
+                    browser = p.chromium.connect_over_cdp(ws_endpoint)
+                    context = browser.contexts[0] if browser.contexts else browser.new_context()
+                    page = context.new_page()
 
-                # --- AUTOMATION LOGIC ---
-                # This is where the actual automation steps go.
-                # For now, just navigate and take a screenshot as proof.
-                # In production, customize this per campaign type.
-                add_log(session, job_id, "running", f"Performing automation for {username}")
+                    add_log(session, job_id, "running", f"Navigating to {campaign.target_url}")
+                    page.goto(campaign.target_url, wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(2000)
 
-                # Example: fill login form if present
-                # page.fill('input[name="email"]', username)
-                # page.fill('input[name="password"]', password)
-                # page.click('button[type="submit"]')
-                # page.wait_for_timeout(3000)
+                    add_log(session, job_id, "running", f"Performing automation for {username}")
+                    page.wait_for_timeout(2000)
+                    page.close()
 
-                page.wait_for_timeout(2000)
-                page.close()
-
-        finally:
-            # Always stop the profile
-            multilogin.stop_profile(str(profile_id))
+            finally:
+                multilogin.stop_profile(str(profile_id))
 
         # Mark success
         job.status = JobStatus.success
